@@ -9,3 +9,6 @@ You will have 4 labs:
 | 3 | Lab III. Speech synthesis           |          |
 | 4 | Lab IV. NLU (see Canvas)            |          |
 | 5 | Lab V. Advanced dialogue management |          |
+
+
+Adaugat comment
