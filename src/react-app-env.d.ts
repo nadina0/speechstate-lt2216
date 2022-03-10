@@ -47,6 +47,7 @@ interface SDSContext {
     username: string;
     affirmation: string;
     negation: string;
+    counter: any;
   
 }
 
@@ -62,4 +63,5 @@ type SDSEvent =
     | { type: 'ENDSPEECH' }
     | { type: 'LISTEN' }
     | { type: 'TIMEOUT' }
-    | { type: 'SPEAK', value: string };
+    | { type: 'SPEAK', value: string }
+    | { type: 'counter', value: any }
