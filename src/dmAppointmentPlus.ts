@@ -91,7 +91,7 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
             initial: 'clarification',
             states: {
                 clarification: {
-                    entry: say('I am helping you.'),
+                    entry: say('Listen carefully to the instructions you are presented with.'),
                     on: { ENDSPEECH: '#root.dm.appointment.hist' }
                 }
             }
@@ -151,7 +151,7 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                         }
                     }
                 },
-
+                
                 hello: {
                     entry: send((context) => ({
                         type: 'SPEAK',
