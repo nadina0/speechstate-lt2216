@@ -113,12 +113,12 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                             },
                             {
                                 target: 'hello',
-                                cond: (context) => context.recResult[0]["confidence"] > 0.6,
+                                cond: (context) => context.recResult[0]["confidence"] > 0.5,
                                 actions: assign({ username: (context) => context.recResult[0].utterance })
                             },
                             {
-                                target: 'hello',
-                                cond: (context) => context.recResult[0]["confidence"] < 0.6,
+                                target: 'userconfirm',
+                                cond: (context) => context.recResult[0]["confidence"] < 0.5,
                                 actions: assign({ username: (context) => context.recResult[0].utterance })
                             },
                         ],
@@ -154,7 +154,38 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                         }
                     }
                 },
-                
+                userconfirm: {
+                    initial: 'prompt',
+                    on: {
+                        RECOGNISED: [
+                            {
+                                target: 'hello',
+                                cond: (context) => 'affirmation' in (grammar2[context.recResult[0].utterance] || {})
+                            },
+                            {
+                                target: '#root.dm.appointment',
+                                cond: (context) => "negation" in (grammar2[context.recResult[0].utterance] || {})
+                            },
+                        ],
+                    },
+                    states: {
+                        prompt: {
+                            entry: send ((context) => ({
+                                type: 'SPEAK',
+                                value: `did you mean to say ${context.username}? `
+                            })),
+                            on: { ENDSPEECH: 'ask' }
+                        },
+                        ask: {
+                            entry: send('LISTEN')
+                        },
+                        nomatch: {
+                            entry: say("Sorry, I didn't understand. Can you please repeat that?"),
+                            on: { ENDSPEECH: 'ask'}
+                        }
+
+                    }
+                },
                 hello: {
                     entry: send((context) => ({
                         type: 'SPEAK',
@@ -173,12 +204,16 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                             },
                             {
                                 target: 'meeting',
-                                cond: (context) => "meeting" in (menu_grammar[context.recResult[0].utterance] || {}),
+                                cond: (context) => "meeting" in (menu_grammar[context.recResult[0].utterance] || {}) && context.recResult[0]["confidence"] > 0.5,
                             
                             },
                             {
                                 target: 'searchPerson',
-                                cond: (context) => "person" in (menu_grammar[context.recResult[0].utterance] || {}),
+                                cond: (context) => "person" in (menu_grammar[context.recResult[0].utterance] || {}) && context.recResult[0]["confidence"] > 0.5,
+                            },
+                            {
+                                target: 'confirmmenu',
+                                cond: (context) => context.recResult[0]["confidence"] < 0.5,
                             },
                             {
                                 target: '.nomatch'
@@ -217,6 +252,42 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
 
                     }
                 },
+                confirmmenu: {
+                    initial: 'prompt',
+                    on: {
+                        RECOGNISED: [
+                            {
+                                target: 'searchPerson',
+                                cond: (context) => "person" in (menu_grammar[context.recResult[0].utterance] || {}) && 'affirmation' in (grammar2[context.recResult[0].utterance] || {}),
+                            },
+                            {
+                                target: 'setMeeting',
+                                cond: (context) => "meeting" in (menu_grammar[context.recResult[0].utterance] || {}) && 'affirmation' in (grammar2[context.recResult[0].utterance] || {}),
+                            },
+                            {
+                                target: '#root.dm.appointment.menu',
+                                cond: (context) => "negation" in (grammar2[context.recResult[0].utterance] || {})
+                            },
+                        ],
+                    },
+                    states: {
+                        prompt: {
+                            entry: send ((context) => ({
+                                type: 'SPEAK',
+                                value: "Was that what you meant to say?"
+                            })),
+                            on: { ENDSPEECH: 'ask' }
+                        },
+                        ask: {
+                            entry: send('LISTEN')
+                        },
+                        nomatch: {
+                            entry: say("Sorry, I didn't understand. Can you please repeat that?"),
+                            on: { ENDSPEECH: 'ask'}
+                        }
+
+                    }
+                },
                 searchPerson: {
                     initial: 'prompt',
                     entry: assign({counter: (context) => 0}),
@@ -228,7 +299,12 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                             },
                             {
                                 target: 'searching',
-                                actions: assign({ person: (context) => context.recResult[0].utterance })
+                                actions: assign({ person: (context) => context.recResult[0].utterance }),
+                                cond: (context) => context.recResult[0]["confidence"] > 0.5,
+                            },
+                            {
+                                target: 'confirmsearching',
+                                cond: (context) => context.recResult[0]["confidence"] < 0.5,
                             },
                         ],
                         TIMEOUT: {actions: assign({ counter: (context) => context.counter+1}), target: '.counts'}
@@ -259,6 +335,38 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                         },
                         nomatch: {
                             entry: say("Can you please repeat?"),
+                            on: { ENDSPEECH: 'ask'}
+                        }
+
+                    }
+                },
+                confirmsearching: {
+                    initial: 'prompt',
+                    on: {
+                        RECOGNISED: [
+                            {
+                                target: 'searching',
+                                cond: (context) => 'affirmation' in (grammar2[context.recResult[0].utterance] || {}),
+                            },
+                            {
+                                target: '#root.dm.appointment.searchPerson',
+                                cond: (context) => "negation" in (grammar2[context.recResult[0].utterance] || {})
+                            },
+                        ],
+                    },
+                    states: {
+                        prompt: {
+                            entry: send ((context) => ({
+                                type: 'SPEAK',
+                                value: `did you mean to say ${context.person}? `
+                            })),
+                            on: { ENDSPEECH: 'ask' }
+                        },
+                        ask: {
+                            entry: send('LISTEN')
+                        },
+                        nomatch: {
+                            entry: say("Sorry, I didn't understand. Can you please repeat that?"),
                             on: { ENDSPEECH: 'ask'}
                         }
 
@@ -302,7 +410,12 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                             },
                             {
                                 target: 'askday',
-                                cond: (context) => "affirmation" in (grammar2[context.recResult[0].utterance] || {}),
+                                cond: (context) => "affirmation" in (grammar2[context.recResult[0].utterance] || {}) && context.recResult[0]["confidence"] > 0.5 ,
+                                actions: assign({ title: (context) => `meeting with ${context.person}`})
+                            },
+                            {
+                                target: 'confirmsetupmeetingwithperson',
+                                cond: (context) => context.recResult[0]["confidence"] < 0.5 ,
                                 actions: assign({ title: (context) => `meeting with ${context.person}`})
                             },
                             {
@@ -346,6 +459,38 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
 
                     }
                 },
+                confirmsetupmeetingwithperson: {
+                    initial: 'prompt',
+                    on: {
+                        RECOGNISED: [
+                            {
+                                target: 'askday',
+                                cond: (context) => 'affirmation' in (grammar2[context.recResult[0].utterance] || {}),
+                            },
+                            {
+                                target: '#root.dm.appointment.setMeeting',
+                                cond: (context) => "negation" in (grammar2[context.recResult[0].utterance] || {})
+                            },
+                        ],
+                    },
+                    states: {
+                        prompt: {
+                            entry: send ((context) => ({
+                                type: 'SPEAK',
+                                value: `did you mean to say that? `
+                            })),
+                            on: { ENDSPEECH: 'ask' }
+                        },
+                        ask: {
+                            entry: send('LISTEN')
+                        },
+                        nomatch: {
+                            entry: say("Sorry, I didn't understand. Can you please repeat that?"),
+                            on: { ENDSPEECH: 'ask'}
+                        }
+
+                    }
+                },            
                 meeting: {
                     initial: 'prompt',
                     entry: assign({counter: (context) => 0}),
@@ -357,7 +502,13 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                             },
                             {
                                 target: 'info',
-                                cond: (context) => "title" in (grammar[context.recResult[0].utterance] || {}),
+                                cond: (context) => "title" in (grammar[context.recResult[0].utterance] || {}) && context.recResult[0]["confidence"] > 0.5,
+                                actions: assign({ title: (context) => grammar[context.recResult[0].utterance].title! })
+                        
+                            },
+                            {
+                                target: 'confirmmeeting',
+                                cond: (context) => context.recResult[0]["confidence"] < 0.5,
                                 actions: assign({ title: (context) => grammar[context.recResult[0].utterance].title! })
                         
                             },
@@ -398,6 +549,38 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
 
                     }
                 },
+                confirmmeeting: {
+                    initial: 'prompt',
+                    on: {
+                        RECOGNISED: [
+                            {
+                                target: 'info',
+                                cond: (context) => 'affirmation' in (grammar2[context.recResult[0].utterance] || {}),
+                            },
+                            {
+                                target: '#root.dm.appointment.meeting',
+                                cond: (context) => "negation" in (grammar2[context.recResult[0].utterance] || {})
+                            },
+                        ],
+                    },
+                    states: {
+                        prompt: {
+                            entry: send ((context) => ({
+                                type: 'SPEAK',
+                                value: `did you mean to say that? `
+                            })),
+                            on: { ENDSPEECH: 'ask' }
+                        },
+                        ask: {
+                            entry: send('LISTEN')
+                        },
+                        nomatch: {
+                            entry: say("Sorry, I didn't understand. Can you please repeat that?"),
+                            on: { ENDSPEECH: 'ask'}
+                        }
+
+                    }
+                },     
                 info: {
                     entry: send((context) => ({
                         type: 'SPEAK',
@@ -405,7 +588,6 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                     })),
                     on: { ENDSPEECH: 'askday' }
                 },
-                
                 askday: {
                     initial: 'prompt',
                     entry: assign({counter: (context) => 0}),
@@ -417,8 +599,13 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                             },
                             {
                                 target: 'infoday',
-                                cond: (context) => "day" in (grammar[context.recResult[0].utterance] || {}),
+                                cond: (context) => "day" in (grammar[context.recResult[0].utterance] || {}) && context.recResult[0]["confidence"] > 0.5,
                                 actions: assign({ day: (context) => grammar[context.recResult[0].utterance].day! })
+                            },
+                            {
+                                target: 'confirmaskday',
+                                cond: (context) => context.recResult[0]["confidence"] < 0.5,
+                            
                             },
                             {
                                 target: '.nomatch'
@@ -458,6 +645,39 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
 
                     }
                 },
+                confirmaskday: {
+                    initial: 'prompt',
+                    on: {
+                        RECOGNISED: [
+                            {
+                                target: 'infoday',
+                                cond: (context) => 'affirmation' in (grammar2[context.recResult[0].utterance] || {}),
+                            },
+                            {
+                                target: '#root.dm.appointment.askday',
+                                cond: (context) => "negation" in (grammar2[context.recResult[0].utterance] || {})
+                            },
+                        ],
+                    },
+                    states: {
+                        prompt: {
+                            entry: send ((context) => ({
+                                type: 'SPEAK',
+                                value: `did you mean to say that? `
+                            })),
+                            on: { ENDSPEECH: 'ask' }
+                        },
+                        ask: {
+                            entry: send('LISTEN')
+                        },
+                        nomatch: {
+                            entry: say("Sorry, I didn't understand. Can you please repeat that?"),
+                            on: { ENDSPEECH: 'ask'}
+                        }
+
+                    }
+                },   
+
                 infoday: {
                     entry: send((context) => ({
                         type: 'SPEAK',
@@ -476,11 +696,15 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                             },
                             {
                                 target: 'infowholeday',
-                                cond: (context) => "affirmation" in (grammar2[context.recResult[0].utterance] || {})
+                                cond: (context) => "affirmation" in (grammar2[context.recResult[0].utterance] || {}) && context.recResult[0]["confidence"] > 0.5,
                             },
                             {
                                 target: 'asktime',
-                                cond: (context) => "negation" in (grammar2[context.recResult[0].utterance] || {}) 
+                                cond: (context) => "negation" in (grammar2[context.recResult[0].utterance] || {})  && context.recResult[0]["confidence"] > 0.5,
+                            },
+                            {
+                                target: 'confirmwholeday',
+                                cond: (context) => context.recResult[0]["confidence"] < 0.5,
                             },
                             {
                                 target: '.nomatch'
@@ -519,6 +743,38 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
 
                     }
                 },
+                confirmwholeday: {
+                    initial: 'prompt',
+                    on: {
+                        RECOGNISED: [
+                            {
+                                target: '#root.dm.appointment.wholeday',
+                                cond: (context) => 'affirmation' in (grammar2[context.recResult[0].utterance] || {}),
+                            },
+                            {
+                                target: '#root.dm.appointment.wholeday',
+                                cond: (context) => "negation" in (grammar2[context.recResult[0].utterance] || {})
+                            },
+                        ],
+                    },
+                    states: {
+                        prompt: {
+                            entry: send ((context) => ({
+                                type: 'SPEAK',
+                                value: `did you mean to say that? `
+                            })),
+                            on: { ENDSPEECH: 'ask' }
+                        },
+                        ask: {
+                            entry: send('LISTEN')
+                        },
+                        nomatch: {
+                            entry: say("Sorry, I didn't understand. Can you please repeat that?"),
+                            on: { ENDSPEECH: 'ask'}
+                        }
+
+                    }
+                },
                 infowholeday: {
                     entry: send((context) => ({
                         type: 'SPEAK',
@@ -537,10 +793,14 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                             },
                             {
                                 target: 'meetingcreated',
-                                cond: (context) => "affirmation" in (grammar2[context.recResult[0].utterance] || {})
+                                cond: (context) => "affirmation" in (grammar2[context.recResult[0].utterance] || {}) && context.recResult[0]["confidence"] > 0.5
                             },
                             {
-                                target: 'meeting', cond: (context) => "negation" in (grammar2[context.recResult[0].utterance] || {})
+                                target: 'meeting', cond: (context) => "negation" in (grammar2[context.recResult[0].utterance] || {}) && context.recResult[0]["confidence"] > 0.5
+                            },
+                            {
+                                target: 'meetingwholedayconfirm',
+                                cond: (context) =>  context.recResult[0]["confidence"] < 0.5
                             },
                             {
                                 target: '.nomatch'
@@ -588,6 +848,39 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
 
                     }
                 },
+                meetingwholedayconfirm: {
+                    initial: 'prompt',
+                    on: {
+                        RECOGNISED: [
+                            {
+                                target: 'infomeeting',
+                                cond: (context) => 'affirmation' in (grammar2[context.recResult[0].utterance] || {}),
+                            },
+                            {
+                                target: '#root.dm.appointment.meetingwholeday',
+                                cond: (context) => "negation" in (grammar2[context.recResult[0].utterance] || {})
+                            },
+                        ],
+                    },
+                    states: {
+                        prompt: {
+                            entry: send ((context) => ({
+                                type: 'SPEAK',
+                                value: `did you mean to say that? `
+                            })),
+                            on: { ENDSPEECH: 'ask' }
+                        },
+                        ask: {
+                            entry: send('LISTEN')
+                        },
+                        nomatch: {
+                            entry: say("Sorry, I didn't understand. Can you please repeat that?"),
+                            on: { ENDSPEECH: 'ask'}
+                        }
+
+                    }
+
+                },
                 infomeeting: {
                     entry: send((context) => ({
                         type: 'SPEAK',
@@ -606,8 +899,12 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                             },
                             {
                                 target: 'infoasktime',
-                                cond: (context) => "time" in (grammar[context.recResult[0].utterance] || {}),
+                                cond: (context) => "time" in (grammar[context.recResult[0].utterance] || {}) && context.recResult[0]["confidence"] > 0.5,
                                 actions: assign({ time: (context) => grammar[context.recResult[0].utterance].time! })
+                            },
+                            {
+                                target: 'confirmasktime',
+                                cond: (context) => context.recResult[0]["confidence"] < 0.5,
                             },
                             {
                                 target: '.nomatch'
@@ -646,6 +943,39 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
 
                     }
                 },
+                confirmasktime: {
+                    initial: 'prompt',
+                    on: {
+                        RECOGNISED: [
+                            {
+                                target: 'infoasktime',
+                                cond: (context) => 'affirmation' in (grammar2[context.recResult[0].utterance] || {}),
+                            },
+                            {
+                                target: '#root.dm.appointment.asktime',
+                                cond: (context) => "negation" in (grammar2[context.recResult[0].utterance] || {})
+                            },
+                        ],
+                    },
+                    states: {
+                        prompt: {
+                            entry: send ((context) => ({
+                                type: 'SPEAK',
+                                value: `did you mean to say ${context.time}? `
+                            })),
+                            on: { ENDSPEECH: 'ask' }
+                        },
+                        ask: {
+                            entry: send('LISTEN')
+                        },
+                        nomatch: {
+                            entry: say("Sorry, I didn't understand. Can you please repeat that?"),
+                            on: { ENDSPEECH: 'ask'}
+                        }
+
+                    }
+
+                },
                 infoasktime: {
                     entry: send((context) => ({
                         type: 'SPEAK',
@@ -664,11 +994,15 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                             },
                             {
                                 target: 'meetingcreated',
-                                cond: (context) => "affirmation" in (grammar2[context.recResult[0].utterance] || {}),
+                                cond: (context) => "affirmation" in (grammar2[context.recResult[0].utterance] || {}) && context.recResult[0]["confidence"] > 0.5,
                             },
                             {
-                                target: 'meeting', cond: (context) => "negation" in (grammar2[context.recResult[0].utterance] || {}),
+                                target: 'meeting', cond: (context) => "negation" in (grammar2[context.recResult[0].utterance] || {}) && context.recResult[0]["confidence"] > 0.5,
 
+                            },
+                            {
+                                target: 'confirmmeetingcreated',
+                                cond: (context) => context.recResult[0]["confidence"] < 0.5,
                             },
                             {
                                 target: '.nomatch'
@@ -715,6 +1049,39 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                         }
 
                     }
+                },
+                confirmmeetingcreated: {
+                    initial: 'prompt',
+                    on: {
+                        RECOGNISED: [
+                            {
+                                target: 'meetingcreated',
+                                cond: (context) => 'affirmation' in (grammar2[context.recResult[0].utterance] || {}),
+                            },
+                            {
+                                target: '#root.dm.appointment.askmeeting2',
+                                cond: (context) => "negation" in (grammar2[context.recResult[0].utterance] || {})
+                            },
+                        ],
+                    },
+                    states: {
+                        prompt: {
+                            entry: send ((context) => ({
+                                type: 'SPEAK',
+                                value: `did you mean to say that? `
+                            })),
+                            on: { ENDSPEECH: 'ask' }
+                        },
+                        ask: {
+                            entry: send('LISTEN')
+                        },
+                        nomatch: {
+                            entry: say("Sorry, I didn't understand. Can you please repeat that?"),
+                            on: { ENDSPEECH: 'ask'}
+                        }
+
+                    }
+
                 },
                 meetingcreated: {
                     initial: 'prompt',
