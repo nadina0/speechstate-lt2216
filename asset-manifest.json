@@ -1,8 +1,8 @@
 {
   "files": {
     "main.css": "/speechstate-lt2216/static/css/main.b1018c19.chunk.css",
-    "main.js": "/speechstate-lt2216/static/js/main.f5864221.chunk.js",
-    "main.js.map": "/speechstate-lt2216/static/js/main.f5864221.chunk.js.map",
+    "main.js": "/speechstate-lt2216/static/js/main.625162e0.chunk.js",
+    "main.js.map": "/speechstate-lt2216/static/js/main.625162e0.chunk.js.map",
     "runtime-main.js": "/speechstate-lt2216/static/js/runtime-main.ed139b76.js",
     "runtime-main.js.map": "/speechstate-lt2216/static/js/runtime-main.ed139b76.js.map",
     "static/js/2.e3360003.chunk.js": "/speechstate-lt2216/static/js/2.e3360003.chunk.js",
@@ -15,6 +15,6 @@
     "static/js/runtime-main.ed139b76.js",
     "static/js/2.e3360003.chunk.js",
     "static/css/main.b1018c19.chunk.css",
-    "static/js/main.f5864221.chunk.js"
+    "static/js/main.625162e0.chunk.js"
   ]
 }
