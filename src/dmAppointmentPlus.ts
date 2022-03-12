@@ -20,6 +20,27 @@ const kbRequest = (text: string) =>
     fetch(new Request(`https://cors.eu.org/https://api.duckduckgo.com/?q=${text}&format=json&skip_disambig=1`)).then(data => data.json())
 
 
+const rasaurl = 'https://speechstate.herokuapp.com/model/parse';
+
+const nluRequest = (text: string) =>
+    fetch(new Request(rasaurl, {
+        method: 'POST',
+        body: `{'text': ${text}'}`
+    }))
+        .then(data => data.json());
+
+
+const assistant_grammar: {[index: string]: {action?: string}} = {
+    "vacuum": {action: "vacuum"},
+    "move_to_trasn": {action: "throw this in the trash"},
+    "give": {action: "give this"},
+    "turn_on_light": {action: "turn on the light"},
+    "turn_off_light": {action: "turn off the light"},
+    "play_music": {action: "play some music"},
+    "ask_oven_warm": {action: "see if the oven is warm"},
+    "inform_oven_warm": {action: "say that the oven is warm"}
+
+}
 const grammar: { [index: string]: { title?: string, day?: string, time?: string } } = {
     "Lecture.": { title: "Dialogue systems lecture" },
     "Lunch.": { title: "Lunch at the canteen" },
@@ -58,13 +79,20 @@ const grammar2: { [index: string]: { negation?: string, affirmation?: string, he
     "Help.": {help: "Help"}
 }
 
-const menu_grammar: { [index: string]: { meeting?: string, person?: string } } = {
+const menu_grammar: { [index: string]: { meeting?: string, person?: string, assistant?: string } } = {
     "I want to create a meeting.": {meeting: "Yes"},
     "Create a meeting.": {meeting: "Yes"},
     "Meeting": {meeting: "Yes"},
     "I want to search for someone.": {person: "Yes"},
     "Search for someone.": {person: "Yes"},
-    "Search.": {person: "Yes"}
+    "Search.": {person: "Yes"},
+    "I want the assistant": {assistant: "Yes"},
+    "Assist me with something": {assistant: "Yes"},
+    "Assistant": {assistant: "Yes"},
+    "Home assistant": {assistant: "Yes"},
+    "Open the home assistant": {assistant: "Yes"},
+    "Open  home assistant": {assistant: "Yes"}
+
 }
 
 
@@ -212,6 +240,10 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                                 cond: (context) => "person" in (menu_grammar[context.recResult[0].utterance] || {}) && context.recResult[0]["confidence"] > 0.5,
                             },
                             {
+                                target: 'homeAssistant',
+                                cond: (context) => "assistant" in (menu_grammar[context.recResult[0].utterance] || {}) && context.recResult[0]["confidence"] > 0.5,
+                            },
+                            {
                                 target: 'confirmmenu',
                                 cond: (context) => context.recResult[0]["confidence"] < 0.5,
                             },
@@ -231,7 +263,7 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                             ]
                         },
                         prompt: {
-                            entry: say("Do you want to search for someone on the internet or create a meeting?"),
+                            entry: say("Do you want to search for someone on the internet, create a meeting, or open the home assistant?"),
                             on: { ENDSPEECH: 'ask'}
                         },
                         prompt2: {
@@ -239,7 +271,7 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                             on: { ENDSPEECH: 'ask'}
                         },
                         prompt3: {
-                            entry: say("Would you rather set a meeting or search for someone?"),
+                            entry: say("Would you rather set a meeting, search for someone, or get help from your assistant?"),
                             on: { ENDSPEECH: 'ask'}
                         },
                         ask: {
@@ -265,6 +297,10 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
                                 cond: (context) => "meeting" in (menu_grammar[context.recResult[0].utterance] || {}) && 'affirmation' in (grammar2[context.recResult[0].utterance] || {}),
                             },
                             {
+                                target: 'homeAssistant',
+                                cond: (context) => "assistant" in (menu_grammar[context.recResult[0].utterance] || {}) && 'affirmation' in (grammar2[context.recResult[0].utterance] || {}),
+                            },
+                            {
                                 target: '#root.dm.appointment.menu',
                                 cond: (context) => "negation" in (grammar2[context.recResult[0].utterance] || {})
                             },
@@ -288,6 +324,177 @@ export const dmMachine: MachineConfig<SDSContext, any, SDSEvent> = ({
 
                     }
                 },
+                
+                homeAssistant: {
+                    initial: 'prompt',
+                    entry: assign({counter: (context) => 0}),
+                    on: {
+                        RECOGNISED: [
+                            {
+                                target: '#root.dm.help',
+                                cond: (context) => 'help' in (grammar2[context.recResult[0].utterance] || {})
+                            },
+                            {
+                                target: 'helping',
+                                actions: assign({ action: (context) => context.recResult[0].utterance }),
+                                cond: (context) => context.recResult[0]["confidence"] > 0.5,
+                            },
+                            {
+                                target: 'confirmassistant',
+                                cond: (context) => context.recResult[0]["confidence"] < 0.5,
+                            },
+                        ],
+                        TIMEOUT: {actions: assign({ counter: (context) => context.counter+1}), target: '.counts'}
+                    },
+                    states: {
+                        counts: {
+                            always: [
+                            { target: 'prompt', cond: (context) => context.counter === 0},
+                            { target: 'prompt2', cond: (context) => context.counter === 1},
+                            { target: 'prompt3', cond: (context) => context.counter === 2},
+                            { target: '#root.dm.init', cond: (context) => context.counter === 3},
+                            ]
+                        },
+                        prompt: {
+                            entry: say("What do you need help with?"),
+                            on: { ENDSPEECH: 'ask'}
+                        },
+                        prompt2: {
+                            entry: say("What should I do?"),
+                            on: { ENDSPEECH: 'ask'}
+                        },
+                        prompt3: {
+                            entry: say("What do you want me to do?"),
+                            on: { ENDSPEECH: 'ask'}
+                        },
+                        ask: {
+                            entry: send('LISTEN')
+                        },
+                        nomatch: {
+                            entry: say("Can you please repeat?"),
+                            on: { ENDSPEECH: 'ask'}
+                        }
+
+                    }
+                },
+                confirmassistant: {
+                    initial: 'prompt',
+                    on: {
+                        RECOGNISED: [
+                            {
+                                target: 'helping',
+                                cond: (context) => 'affirmation' in (grammar2[context.recResult[0].utterance] || {}),
+                            },
+                            {
+                                target: '#root.dm.appointment.homeAssistant',
+                                cond: (context) => "negation" in (grammar2[context.recResult[0].utterance] || {})
+                            },
+                        ],
+                    },
+                    states: {
+                        prompt: {
+                            entry: send ((context) => ({
+                                type: 'SPEAK',
+                                value: `${context.username}, did you mean to say that? `
+                            })),
+                            on: { ENDSPEECH: 'ask' }
+                        },
+                        ask: {
+                            entry: send('LISTEN')
+                        },
+                        nomatch: {
+                            entry: say("Sorry, I didn't understand. Can you please repeat that?"),
+                            on: { ENDSPEECH: 'ask'}
+                        }
+
+                    }
+                },
+                helping: {
+                    entry: send((context) => ({
+                        type: 'SPEAK',
+                        value: `OK, searching the internet for ${context.person}`
+                    })),
+                    on: {ENDSPEECH: 'assistant_intent'}
+                },
+                // assistant_intent: {
+                //     invoke: {
+                //         id: 'assistantintent',
+                //         src: (context, event) => nluRequest(context.recResult[0].utterance),
+                // //         onDone: {
+                // //             target: 'assistantproceed',
+                // //             actions: [(context, event) =>  console.log(context, event)
+                // //         },
+                // //     //     onError: {
+                // //     //         target: 'homeAssistant'
+                // //     //     }
+                // //     // }
+                // // },
+                assistantproceed: {
+                    initial: 'prompt',
+                    entry: assign({counter: (context) => 0}),
+                    on: {
+                        RECOGNISED: [
+                            {
+                                target: '#root.dm.help',
+                                cond: (context) => 'help' in (grammar2[context.recResult[0].utterance] || {})
+                            },
+                            {
+                                target: 'actiondone',
+                                cond: (context) => 'affirmation' in (grammar2[context.recResult[0].utterance] || {}) && context.recResult[0]["confidence"] > 0.5,
+                            },
+                            {
+                                target: 'homeAssistant',
+                                cond: (context) => 'negation' in (grammar2[context.recResult[0].utterance] || {}) && context.recResult[0]["confidence"] > 0.5,                            },
+                        ],
+                        TIMEOUT: {actions: assign({ counter: (context) => context.counter+1}), target: '.counts'}
+                    },
+                    states: {
+                        counts: {
+                            always: [
+                            { target: 'prompt', cond: (context) => context.counter === 0},
+                            { target: 'prompt2', cond: (context) => context.counter === 1},
+                            { target: 'prompt3', cond: (context) => context.counter === 2},
+                            { target: '#root.dm.init', cond: (context) => context.counter === 3},
+                            ]
+                        },
+                        prompt: {
+                            entry: send((context) => ({
+                                type: 'SPEAK',
+                                value: `$Should I ${context.action}?`
+                            })),
+                            on: { ENDSPEECH: 'ask' }
+                        },
+                        prompt2: {
+                            entry: send((context) => ({
+                                type: 'SPEAK',
+                                value: `$Is ${context.action} what you want me to do?`
+                            })),
+                            on: { ENDSPEECH: 'ask' }
+                        },
+                        prompt3: {
+                            entry: send((context) => ({
+                                type: 'SPEAK',
+                                value: `$Shall I proceed with ${context.action}?`
+                            })),
+                            on: { ENDSPEECH: 'ask' }
+                        },
+                        ask: {
+                            entry: send('LISTEN')
+                        },
+                        nomatch: {
+                            entry: say("Can you please repeat?"),
+                            on: { ENDSPEECH: 'ask'}
+                        }
+
+                    }
+                },
+                actiondone: {
+                    entry: send((context) => ({
+                        type: 'SPEAK',
+                        value: `Ok, I will ${context.action}`
+                    })),
+                    on: { ENDSPEECH: '#root.dm.init' }
+                },                
                 searchPerson: {
                     initial: 'prompt',
                     entry: assign({counter: (context) => 0}),

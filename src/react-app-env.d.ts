@@ -48,6 +48,7 @@ interface SDSContext {
     affirmation: string;
     negation: string;
     counter: any;
+    action: string;
   
 }
 
